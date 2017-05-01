@@ -10,6 +10,8 @@
 #include "FuncHelper.h"
 #include "TxtSupport.h"
 
+#include "key.h"
+
 using namespace std;
 
 bool g_Ws2HasChanged;
@@ -191,6 +193,14 @@ void HOOKFUNC MySelString(Registers* regs) {
     }
 }
 
+#pragma pack(1)
+struct FileEntry {
+    char fname[51];
+    uint32_t offset;
+    uint32_t size;
+};
+#pragma pack()
+
 vector<wstring> GetFileList(wchar_t* path) {
     WIN32_FIND_DATA wfd;
     vector<wstring> files;
@@ -207,12 +217,30 @@ vector<wstring> GetFileList(wchar_t* path) {
     return std::move(files);
 }
 
-vector<string>* ReadTxt(const wstring& txtName) {
-    MyFileReader reader;
-    auto mem = reader.ReadToMem(txtName.c_str());
-    if (!mem.Get()) {
-        return nullptr;
+void XorDec(void* dst, uint32_t len) {
+    auto p = (uint8_t*)dst;
+    for (uint32_t i = 0;i < len;i++) {
+        p[i] ^= g_dat_key[i & 1023];
     }
+}
+
+map<wstring, FileEntry> g_fileInfos;
+
+vector<wstring> GetFileList(NakedMemory& mem) {
+    auto bf = (uint8_t*)mem.Get();
+    auto file_cnt = *(uint32_t*)bf;
+    auto entries = (FileEntry*)(bf + 4);
+    vector<wstring> files;
+    for (int i = 0;i < file_cnt;i++) {
+        files.push_back(decode_string(entries[i].fname, CP_UTF8));
+        g_fileInfos[files[i]] = entries[i];
+    }
+    return std::move(files);
+}
+
+vector<string>* ReadTxt(NakedMemory& pack, const wstring& txtName) {
+    auto& entry = g_fileInfos[txtName];
+    NakedMemory mem((uint8_t*)pack.Get() + entry.offset, entry.size);
     auto ansi = CvtToAnsi(mem, CP_UTF8);
     auto lines = SplitTxtA(ansi);
     while (lines[lines.size() - 1] == "")
@@ -222,12 +250,9 @@ vector<string>* ReadTxt(const wstring& txtName) {
     return new vector<string>(std::move(lines));
 }
 
-vector<uint32_t>* ReadIdx(const wstring& idxName, uint32_t* crc) {
-    MyFileReader reader;
-    auto mem = reader.ReadToMem(idxName.c_str());
-    if (!mem.Get()) {
-        return nullptr;
-    }
+vector<uint32_t>* ReadIdx(NakedMemory& pack, const wstring& idxName, uint32_t* crc) {
+    auto& entry = g_fileInfos[idxName];
+    NakedMemory mem((uint8_t*)pack.Get() + entry.offset, entry.size);
     auto buff = (uint32_t*)mem.Get();
     *crc = *buff;
     auto vec = new vector<uint32_t>((mem.GetSize() - 4) / 4);
@@ -275,17 +300,24 @@ bool ReadArcFileList(const wchar_t* arcName, map<wstring,wstring>& fileMap) {
 }
 
 void InitWs2() {
-    auto txtList = GetFileList(L"txt\\*.txt");
+    MyFileReader reader;
+    auto mem = reader.ReadToMem("cnpack");
+    if (!mem.Get()) {
+        Log(L"Can't read pack.");
+        return;
+    }
+    XorDec(mem.Get(), mem.GetSize());
+    auto txtList = GetFileList(mem);
     for (auto& txtName : txtList) {
-        auto idxFullName = L"idx\\" + txtName.substr(0, txtName.length() - 4) + L".idx";
-        auto txtFullName = L"txt\\" + txtName;
-        auto lines = ReadTxt(txtFullName);
+        auto idxFullName = L"idx\\" + txtName.substr(4, txtName.length() - 8) + L".idx";
+        auto txtFullName = txtName;
+        auto lines = ReadTxt(mem, txtFullName);
         if (!lines) {
             Log(L"Reading %s error.", txtFullName.c_str());
             continue;
         }
         uint32_t crc;
-        auto idxs = ReadIdx(idxFullName, &crc);
+        auto idxs = ReadIdx(mem, idxFullName, &crc);
         if (!idxs) {
             Log(L"Reading %s eror.", idxFullName.c_str());
             delete lines;
