@@ -47,11 +47,11 @@ void HOOKFUNC MyCFI(LPLOGFONTW lfi)
     }
 }
 
-void HOOKFUNC MyCW(char** strp)
+void HOOKFUNC MyCW(wchar_t** strp)
 {
-    if (strcmp(*strp, "\x83\x8C\x83\x7E\x83\x6A\x83\x5A\x83\x93\x83\x58") == 0)
+    if (*strp && wcscmp(*strp, L"想いを捧げる乙女のメロディー") == 0)
     {
-        *strp = "Reminiscence";
+        *strp = L"『有少女献鸣的爱之奏章』中文版 | 黙示游戏中文化兴趣小组 译制 | 交流群号：153454926";
     }
 }
 

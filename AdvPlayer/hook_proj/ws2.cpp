@@ -215,6 +215,10 @@ vector<string>* ReadTxt(const wstring& txtName) {
     }
     auto ansi = CvtToAnsi(mem, CP_UTF8);
     auto lines = SplitTxtA(ansi);
+    while (lines[lines.size() - 1] == "")
+    {
+        lines.pop_back();
+    }
     return new vector<string>(std::move(lines));
 }
 
@@ -288,7 +292,7 @@ void InitWs2() {
             continue;
         }
         if (idxs->size() != lines->size()) {
-            Log(L"%s line error, need:%d, real:%d", txtFullName, idxs->size(), lines->size());
+            Log(L"%s line error, need:%d, real:%d", txtFullName.c_str(), idxs->size(), lines->size());
             delete lines;
             delete idxs;
             continue;
