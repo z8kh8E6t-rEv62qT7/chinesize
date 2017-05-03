@@ -309,6 +309,9 @@ void InitWs2() {
     XorDec(mem.Get(), mem.GetSize());
     auto txtList = GetFileList(mem);
     for (auto& txtName : txtList) {
+        if (txtName.substr(txtName.length() - 3) != L"txt") {
+            continue;
+        }
         auto idxFullName = L"idx\\" + txtName.substr(4, txtName.length() - 8) + L".idx";
         auto txtFullName = txtName;
         auto lines = ReadTxt(mem, txtFullName);
